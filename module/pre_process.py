@@ -187,3 +187,23 @@ def map_processing(df1, df2, grid_data, label_grid_data, time_stamp, f_cols,
         for date_index in range(n_day - time_size):
             i_data = date_index+time_size # 3개의 시간대로 1개의 시간예측
             grid_data[i_data, 0:time_size, r, c, n_f] = label_grid_data[date_index:date_index+time_size, 0, r, c, 0]
+
+# bit_mask 제작
+def create_mask(df):
+  mask = np.zeros((32,32), dtype=np.float32)
+  r_lst = df['row'].tolist()
+  c_lst = df['col'].tolist()
+  for i in range(len(r_lst)):
+    row = r_lst[i]
+    col = c_lst[i]
+    mask[row, col] = 1
+  return mask
+
+# 관측소가 있는 지점만 마스킹, flatten
+def filtering_data(y, pred, mask):
+    y_masked = y[:, mask!=0]
+    pred_masked = pred[:, mask!=0]
+    y_flat = y_masked.flatten()
+    pred_flat = pred_masked.flatten()
+
+    return y_flat, pred_flat
