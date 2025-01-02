@@ -91,8 +91,8 @@ def train_model(model, train_data, valid_data, criterion, optimizer, epochs, pat
 
   for epoch in range(epochs):
     model.train()
-    train_loss_per_batch = 0.0
-    train_metric_per_batch = 0.0
+    train_loss_sum_batch = 0.0
+    train_metric_sum_batch = 0.0
 
     # training (per batch)
     for inputs, targets in train_data:
@@ -105,18 +105,19 @@ def train_model(model, train_data, valid_data, criterion, optimizer, epochs, pat
       loss.backward()
       optimizer.step()
       mae = torch.mean(torch.abs(pred-targets))
+        
+        # Batch마다 평균낸 loss를 다시 합친다
+      train_loss_sum_batch += loss.item()*inputs.size(0)
+      train_metric_sum_batch += mae.item()*inputs.size(0)
 
-      train_loss_per_batch += loss.item()*inputs.size(0)
-      train_metric_per_batch += mae.item()*inputs.size(0)
-
-    train_loss = train_loss_per_batch / len(train_data.dataset)
-    train_metric = train_metric_per_batch / len(train_data.dataset)
+    train_loss = train_loss_sum_batch / len(train_data.dataset)
+    train_metric = train_metric_sum_batch / len(train_data.dataset)
 
 
     # evaluate (per batch)
     model.eval()
-    val_loss_per_batch = 0.0
-    val_metric_per_batch = 0.0
+    val_loss_sum_batch = 0.0
+    val_metric_sum_batch = 0.0
 
     with torch.no_grad():
       for inputs, targets in valid_data:
@@ -125,12 +126,13 @@ def train_model(model, train_data, valid_data, criterion, optimizer, epochs, pat
         pred = model(inputs)
         loss = criterion(pred, targets)
         mae = torch.mean(torch.abs(pred-targets))
+    
+        # Batch마다 평균낸 loss를 다시 합친다
+        val_loss_sum_batch += loss.item() * inputs.size(0)
+        val_metric_sum_batch += mae.item() * inputs.size(0)
 
-        val_loss_per_batch += loss.item() / inputs.size(0)
-        val_metric_per_batch += mae.item() / inputs.size(0)
-
-    val_loss = val_loss_per_batch / len(valid_data.dataset)
-    val_metric = val_metric_per_batch / len(valid_data.dataset)
+    val_loss = val_loss_sum_batch / len(valid_data.dataset)
+    val_metric = val_metric_sum_batch / len(valid_data.dataset)
 
     print(f'Epoch {epoch+1}/{epochs} | Train HuberLoss: {train_loss:.4f} | Train MAE: {train_metric:.4f} | Val HuberLoss: {val_loss:.4f}| Val MAE: {val_metric:.4f}')
 
@@ -226,6 +228,7 @@ def TrainML(xdata, ydata, bit_mask, n_features):
     valid_S = np.zeros((n, 2))
 
     for fold, (train_idx, valid_idx) in enumerate(tscv.split(xdata)):
+        clear_output(wait=True)
         xtrain, xvalid = xdata[train_idx], xdata[valid_idx]
         ytrain, yvalid = ydata[train_idx], ydata[valid_idx]
 
@@ -265,8 +268,6 @@ def TrainML(xdata, ydata, bit_mask, n_features):
         )
         train_S[fold, :] = train_score
         valid_S[fold, :] = valid_score
-
-        clear_output(wait=True)
 
     print(f"Mean Train MAE --> {np.mean(train_S, axis = 0)[1]:.4f}")
     print(f"Mean Validation MAE --> {np.mean(valid_S, axis = 0)[1]:.4f}")
