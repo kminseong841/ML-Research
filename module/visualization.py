@@ -2,8 +2,14 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-# 한 행에 여러 그래프(subplot)를 그리는 함수.
-def plot_subplots(data_specs, figsize=(15, 6), suptitle=None, tight=True):
+def plot_subplots(
+    data_specs, 
+    figsize=(15, 6), 
+    suptitle=None, 
+    tight=True,
+    chunk_plots=False,   # <--- [NEW] 기본값=False
+    chunk_size=5         # <--- [NEW] 기본값=5
+):
     """
     Parameters
     ----------
@@ -11,9 +17,9 @@ def plot_subplots(data_specs, figsize=(15, 6), suptitle=None, tight=True):
         각 subplot별로 그릴 정보를 담고 있는 딕셔너리들의 리스트.
         예: 
         data_specs = [
-            {   # 1번 subplot
-                'plot_type': 'hist',   # 'hist' or 'line'
-                'data_list': [ array1, array2 ],  # 여러 개도 가능 (예: 히스토그램 2개)
+            {
+                'plot_type': 'hist',  # 'hist' or 'line'
+                'data_list': [array1, array2],
                 'bins': 150,
                 'alpha_list': [0.5, 0.5],
                 'labels': ['Ground Truth','Prediction'],
@@ -22,10 +28,10 @@ def plot_subplots(data_specs, figsize=(15, 6), suptitle=None, tight=True):
                 'title': 'Train O3 Distribution',
                 'grid': False
             },
-            {   # 2번 subplot
-                'plot_type': 'line',   # 'hist' or 'line'
-                'x': x_values,         # 시계열(혹은 x축)
-                'y_list': [ mae_per_time, mse_per_time ],
+            {
+                'plot_type': 'line',  # 'hist' or 'line'
+                'x': x_values,
+                'y_list': [mae_per_time, mse_per_time],
                 'labels': ['MAE','MSE'],
                 'colors': ['blue','red'],
                 'xlabel': 'Time Index',
@@ -41,13 +47,56 @@ def plot_subplots(data_specs, figsize=(15, 6), suptitle=None, tight=True):
         전체 subplot에 대한 제목.
     tight : bool, optional
         True면 plt.tight_layout() 적용.
+    chunk_plots : bool, optional
+        True일 경우, data_specs를 chunk_size씩 끊어 여러 Figure로 나누어 그린다.
+        (기본값: False)
+    chunk_size : int, optional
+        chunk_plots가 True일 때, 몇 개의 subplot을 한 Figure에 배치할지 결정한다.
+        (기본값: 5)
 
     Returns
     -------
     None
     """
+
+    # ------------------------------------
+    # 1) chunk_plots=True 이고 data_specs 길이가 chunk_size 초과할 경우,
+    #    여러 Figure로 나누어 그리는 로직
+    # ------------------------------------
+    if chunk_plots and len(data_specs) > chunk_size:
+        # 예: 25개의 data_specs을 5개씩 끊으면 총 5개의 Figure가 나옴
+        for start_idx in range(0, len(data_specs), chunk_size):
+            chunk = data_specs[start_idx:start_idx + chunk_size]
+            
+            # 각 chunk(예: 최대 5개)에 대해 원래의 로직을 그대로 수행
+            _plot_subplots_core(
+                chunk,
+                # chunk_size만큼 1행으로 그리므로, figsize는 여기서 동적으로 조정
+                figsize=(chunk_size * 5, figsize[1]) if chunk_size > 1 else figsize,
+                suptitle=suptitle,
+                tight=tight
+            )
+        return  # 여러 Figure로 나누어 그린 후 종료
+
+    # ------------------------------------
+    # 2) 그 외(기존 방식 유지): 한 번에 한 Figure에 전부 그리기
+    # ------------------------------------
+    _plot_subplots_core(
+        data_specs, 
+        figsize=figsize, 
+        suptitle=suptitle, 
+        tight=tight
+    )
+
+
+def _plot_subplots_core(data_specs, figsize=(15, 6), suptitle=None, tight=True):
+    """
+    실제로 subplot을 그리는 내부 함수.
+    (chunk로 나누지 않는 그리기 로직 그대로 모듈화)
+    """
     n_plots = len(data_specs)
     fig, axes = plt.subplots(1, n_plots, figsize=figsize)
+
     # subplot이 1개만 있을 경우 axes가 ndarray가 아니므로 처리
     if n_plots == 1:
         axes = [axes]
@@ -60,26 +109,28 @@ def plot_subplots(data_specs, figsize=(15, 6), suptitle=None, tight=True):
         xlabel = spec.get('xlabel', '')
         ylabel = spec.get('ylabel', '')
         grid = spec.get('grid', False)
-        
+
         if plot_type == 'hist':
             # 히스토그램 그리기
             data_list = spec.get('data_list', [])
             bins = spec.get('bins', 50)
-            alpha_list = spec.get('alpha_list', [0.7]*len(data_list))
-            labels = spec.get('labels', [None]*len(data_list))
+            alpha_list = spec.get('alpha_list', [0.7] * len(data_list))
+            labels = spec.get('labels', [None] * len(data_list))
             for data_idx, data_ in enumerate(data_list):
-                ax.hist(data_, 
-                        bins=bins, 
-                        alpha=alpha_list[data_idx], 
-                        label=labels[data_idx], 
-                        edgecolor='black')
-            
+                ax.hist(
+                    data_,
+                    bins=bins,
+                    alpha=alpha_list[data_idx],
+                    label=labels[data_idx],
+                    edgecolor='black'
+                )
+
         elif plot_type == 'line':
             # 라인 플롯(시계열)
             x_values = spec.get('x', None)
             y_list = spec.get('y_list', [])
-            labels = spec.get('labels', [None]*len(y_list))
-            colors = spec.get('colors', [None]*len(y_list))
+            labels = spec.get('labels', [None] * len(y_list))
+            colors = spec.get('colors', [None] * len(y_list))
             for y_idx, y_data in enumerate(y_list):
                 ax.plot(
                     x_values,
