@@ -12,21 +12,21 @@ Folder
  
 Description
 
-- Data Extraction
+1) Data Extraction
 Input data: Meteorological Data obtained from the Korea Meteorological Administration’s Data Portal
 Label data: Seoul’s hourly average air quality information acquired from the Seoul Open Data Plaza
 
-- Data Preprocessing
+2) Data Preprocessing
 Missing value handling: (x, y) adjacency interpolation, Time adjacency interpolation
 Standardization: Compare performance when using Quantile Transform, MinMax scaling, BoxCox Transform, and others
 Mapping: Implement preprocessing functions to convert a DataFrame into image data (DataFrame → img Data Mapping)
 
-- Model Architecture
+3) Model Architecture
 Conv3D: Predict the image at the next time step using three sequential time-step images
 ConvLSTM: Predict the image at the next time step using three time sequences along with forget, input, and output gates
 BitMasking: Prevent artificial reduction of loss in regions outside of measurement stations during backpropagation
 
-- Result & Visualization
+4) Result & Visualization
 Test MAE: 0.0009049615166800958 (Conv3D), 0.0010369176743552089 (ConvLSTM)
 Achieved a model with the above prediction performance
 Comparisons
