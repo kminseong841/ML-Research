@@ -3,6 +3,7 @@ import pandas as pd
 from pandas.tseries.offsets import MonthEnd
 from sklearn.preprocessing import MinMaxScaler, StandardScaler, QuantileTransformer
 from scipy import stats
+from math import sqrt
 
 # =========================
 # 1. 데이터 읽기 / 전처리 함수
@@ -19,48 +20,78 @@ def time_processing(df1, df2):
     df2.sort_values(by=['측정소명', '측정일시'], inplace=True)
     df2.reset_index(drop=True, inplace=True)
 
-def interpol_processing(df, cols):
+def interpol_processing(df, cols, region_df):
     specific_date = df.iloc[0]['일시']
     start_date = specific_date.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     end_date = (start_date + MonthEnd(0)).replace(hour=23, minute=0, second=0, microsecond=0)
-    print(start_date, end_date)
-
     full_range = pd.date_range(start=start_date, end=end_date, freq='h')
     stations = df['지점명'].unique()
 
-    # 멀티인덱스 생성
+    # 결측된 부분 명확화
     new_index = pd.MultiIndex.from_product([stations, full_range], names=['지점명', '일시'])
     df.set_index(['지점명', '일시'], inplace=True)
     df = df.reindex(new_index).reset_index()
 
-    # 방법1) 시점별 평균값으로 채우기
-    means = df.groupby('일시')[cols].mean().reset_index()
-    df = df.merge(means, on='일시', suffixes=('', '_mean'))
-    for col in cols:
-        # ---- 아래 주석을 해제하면, 결측치 채우기 전 정보와
-        #      실제로 어느 값으로 바뀌었는지 함께 확인할 수 있습니다. ----
-    
-        missing_before = df[df[col].isna()].copy()
-        for idx in missing_before.index:
-            station_name = df.loc[idx, '지점명']
-            time_val = df.loc[idx, '일시']
-            fill_val = df.loc[idx, col + '_mean']  # 바로 여기서 대체될 값 확인
-            print(f"[기존 방법] <{col}> NaN → {fill_val}  (지점명: {station_name}, 일시: {time_val})")
-        print("--------------------------------------------------------------")
+    # 방법1) 시점별 k개 이웃 관측소 기반 결측치 채우기
+    # station -> (row, col) 매핑(dict) 만들기
+    # region_df 는 met_regions_df 라고 가정
+    station_coords = {}
+    for i, row_data in region_df.iterrows():
+        station_coords[row_data['region']] = (row_data['row'], row_data['col'])
 
-        # ---- 실제 결측치 채우기 ----
-        df[col] = df[col].fillna(df[col + '_mean'])
+    def get_distance(station1, station2):
+        """두 지점(station)의 (row, col) 정보로부터 거리(유클리드) 계산"""
+        r1, c1 = station_coords[station1]
+        r2, c2 = station_coords[station2]
+        return sqrt((r1 - r2)**2 + (c1 - c2)**2)
 
-        # ---- 결측치 채운 뒤, 혹시 남아있는 결측치가 있는지 확인 ----
-        missing_after = df[df[col].isna()].copy()
-        if not missing_after.empty:
-            print(f"[기존 방법] <{col}> 채우기 후 여전히 남은 결측 데이터:")
-            print(missing_after[['지점명','일시',col]].head(10))
-            print("==========================================================")
-        else:
-            print(f"[기존 방법] <{col}> 결측치가 모두 채워졌습니다.")
-            print("==========================================================")
-    df.drop(columns=[col + '_mean' for col in cols], inplace=True)
+    k = 3  # 가까운 관측소 k개를 사용할지 설정(원하는 값으로 조정)
+
+    # 일시별로 그룹화하여 각 시점에서 결측치가 있는 지점만 채우기
+    df_grouped = df.groupby('일시', group_keys=False)
+    filled_data = []
+
+    for current_time, group in df_grouped:
+        # group: 특정 시점(current_time)의 모든 지점 관측치
+        # 결측을 발견하면, 같은 시점 내에서 가까운 k개 관측소 값을 평균 내어 사용
+        for idx in group.index:
+            station_name = group.loc[idx, '지점명']
+            for col in cols:
+                if pd.isnull(group.loc[idx, col]):
+                    # -----------------------------
+                    # (1) 결측 전 상태 출력 (주석 해제해서 사용)
+                    print(f"[수정 후] <{col}> 결측 발견: {station_name} @ {current_time}")
+                    # -----------------------------
+
+                    # 1) 결측치가 아닌 관측소들 대상으로 거리 계산
+                    valid_idx = group[~group[col].isna()].index
+                    distances = []
+                    for v_idx in valid_idx:
+                        neighbor_station = group.loc[v_idx, '지점명']
+                        dist_val = get_distance(station_name, neighbor_station)
+                        distances.append((v_idx, dist_val))
+                    # 2) 거리 순으로 정렬
+                    distances.sort(key=lambda x: x[1])
+                    # 3) 가까운 k개 관측소의 평균값을 결측치로 대체
+                    nearest_idxs = [d[0] for d in distances[:k]]
+                    fill_val = group.loc[nearest_idxs, col].mean()
+
+                    # -----------------------------
+                    # (2) 채울 값 확인 (주석 해제해서 사용)
+                    print(f"→ 채우는 값: {fill_val} (가장 가까운 {k}개 관측소 평균)")
+                    # -----------------------------    
+
+                    group.loc[idx, col] = fill_val
+
+                    # -----------------------------
+                    # (3) 결측 치환 후 상태 출력 (주석 해제해서 사용)
+                    updated_value = group.loc[idx, col]
+                    print(f"[수정 후] <{col}> 치환 후 값: {updated_value} / 지점명: {station_name}, 시점: {current_time}")
+                    print("-------------------------------------------------------------")
+                    # -----------------------------
+        filled_data.append(group)
+
+    df = pd.concat(filled_data, axis=0) # 결측치가 없어진 group들을 연결해서 dataframe으로 재구성.
 
     # 방법2) 같은 지점 보간
     df.set_index('일시', inplace=True)
