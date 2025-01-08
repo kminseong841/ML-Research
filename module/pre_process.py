@@ -37,7 +37,29 @@ def interpol_processing(df, cols):
     means = df.groupby('일시')[cols].mean().reset_index()
     df = df.merge(means, on='일시', suffixes=('', '_mean'))
     for col in cols:
+        # ---- 아래 주석을 해제하면, 결측치 채우기 전 정보와
+        #      실제로 어느 값으로 바뀌었는지 함께 확인할 수 있습니다. ----
+    
+        missing_before = df[df[col].isna()].copy()
+        for idx in missing_before.index:
+            station_name = df.loc[idx, '지점명']
+            time_val = df.loc[idx, '일시']
+            fill_val = df.loc[idx, col + '_mean']  # 바로 여기서 대체될 값 확인
+            print(f"[기존 방법] <{col}> NaN → {fill_val}  (지점명: {station_name}, 일시: {time_val})")
+        print("--------------------------------------------------------------")
+
+        # ---- 실제 결측치 채우기 ----
         df[col] = df[col].fillna(df[col + '_mean'])
+
+        # ---- 결측치 채운 뒤, 혹시 남아있는 결측치가 있는지 확인 ----
+        missing_after = df[df[col].isna()].copy()
+        if not missing_after.empty:
+            print(f"[기존 방법] <{col}> 채우기 후 여전히 남은 결측 데이터:")
+            print(missing_after[['지점명','일시',col]].head(10))
+            print("==========================================================")
+        else:
+            print(f"[기존 방법] <{col}> 결측치가 모두 채워졌습니다.")
+            print("==========================================================")
     df.drop(columns=[col + '_mean' for col in cols], inplace=True)
 
     # 방법2) 같은 지점 보간
