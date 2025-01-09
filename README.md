@@ -1,4 +1,4 @@
-# ML-Research
+# ML-Research (2024.09 ~ 2025.01)
 
 This GitHub project aims to implement a modified version of the paper “SPATIOTEMPORAL DEEP LEARNING MODEL FOR CITYWIDE AIR POLLUTION INTERPOLATION AND PREDICTION.”
 Link: https://ieeexplore.ieee.org/document/9070510
