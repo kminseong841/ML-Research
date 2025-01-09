@@ -1,6 +1,7 @@
 # ML-Research
 
 This GitHub project aims to implement a modified version of the paper “SPATIOTEMPORAL DEEP LEARNING MODEL FOR CITYWIDE AIR POLLUTION INTERPOLATION AND PREDICTION.”
+Link: https://ieeexplore.ieee.org/document/9070510
 
 Pytorch_Ozone_predict_CNN.ipynb -> Current Main file
 
